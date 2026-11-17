@@ -1,0 +1,84 @@
+# AI Agent 全栈开发实战
+
+Python + FastAPI + LLM + LangChain + LangGraph + DeepAgents
+
+## 当前阶段
+
+第二章：Python AI 开发环境搭建
+
+## 技术栈
+
+- Python 3.12
+- FastAPI
+- Uvicorn
+- uv
+
+## 运行项目
+
+```bash
+uv sync
+uv run uvicorn app.main:app --reload
+```
+
+## 项目结构
+
+```text
+app/
+├── api/              FastAPI 接口层
+├── core/             核心配置、常量、日志、异常
+├── schemas/          Pydantic 请求与响应模型
+├── services/         业务逻辑层
+├── repositories/     数据访问层
+├── models/           数据库 ORM 模型
+└── dependencies/     FastAPI 依赖注入
+```
+
+## 日志与异常处理
+
+本项目统一使用：
+
+```text
+Middleware
++
+Exception Handler
++
+Logger
++
+trace_id
+```
+
+---
+
+# 三十七、34｜当前完整请求链路
+
+## 【实操】
+
+```text id="ye5h2t"
+HTTP Request
+    ↓
+trace_and_log_middleware
+    ↓
+生成 trace_id
+    ↓
+记录 request_start
+    ↓
+verify_api_key
+    ↓
+get_current_user
+    ↓
+Router
+    ↓
+Service
+    ↓
+Repository / LLM / RAG
+    ↓
+如果成功：ApiResponse
+    ↓
+如果失败：Exception Handler -> ErrorResponse
+    ↓
+Middleware 添加响应头
+    ↓
+记录 request_end
+    ↓
+HTTP Response
+```
