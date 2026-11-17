@@ -25,3 +25,7 @@ def rag_query_cache_key(query_hash: str, knowledge_base_id: str) -> str:
 
 def verification_code_key(email: str) -> str:
     return f"verification_code:{email}"
+
+
+def document_parse_state_key(task_id: str) -> str:
+    return f"document:parse:{task_id}:state"

@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import Depends, HTTPException, status
 from redis.asyncio import Redis
 
@@ -7,8 +9,8 @@ from app.redis.rate_limit import check_rate_limit
 from app.schemas.user import CurrentUser
 
 async def chat_rate_limit(
-    redis: Redis = Depends(get_redis_client),
-    current_user: CurrentUser = Depends(get_current_user),
+    redis: Annotated[Redis, Depends(get_redis_client)],
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
 ) -> None:
     """
     Rate limit for chat API

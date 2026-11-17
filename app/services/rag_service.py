@@ -1,14 +1,12 @@
 import uuid
 
-from redis.asyncio import Redis
-
-from app.redis.cache import cache_rag_result, get_cached_rag_result
-from app.schemas.chat import SourceDocument, TokenUsage
-from app.schemas.rag import RAGQueryRequest, RAGQueryResponse
-from app.repositories.knowledge_repository import knowledge_repository
-
 from app.core.exceptions import AppException, ErrorCode
 from app.core.logging import get_logger
+from app.redis.cache import cache_rag_result, get_cached_rag_result
+from app.repositories.knowledge_repository import knowledge_repository
+from app.schemas.chat import SourceDocument, TokenUsage
+from app.schemas.rag import RAGQueryRequest, RAGQueryResponse
+from redis.asyncio import Redis
 
 logger = get_logger(__name__)
 
@@ -45,12 +43,9 @@ async def query_rag(
             messgae="知识库查询失败",
             code=ErrorCode.RAG_QUERY_FAILED,
             status_code=500,
-            data={
-                "knowledge_base_id": request.knowledge_base_id
-            }
+            data={"knowledge_base_id": request.knowledge_base_id},
         )
 
-    
     sources = await knowledge_repository.search_documents(
         question=request.question,
         knowledge_base_id=request.knowledge_base_id,
@@ -69,7 +64,7 @@ async def query_rag(
             completion_tokens=len(answer),
             total_tokens=len(request.question) + len(answer),
         ),
-        trace_id=f"trace_{uuid.uuid4().hex[:8]}"
+        trace_id=f"trace_{uuid.uuid4().hex[:8]}",
     )
 
     if redis is not None:

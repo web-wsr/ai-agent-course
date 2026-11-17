@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from app.schemas.response import ApiResponse
 from app.schemas.model import ModelListResponse
@@ -10,7 +12,7 @@ router = APIRouter()
 
 @router.get("/models", response_model=ApiResponse[ModelListResponse])
 async def list_models(
-    admin_user: CurrentUser = Depends(require_admin),
+    admin_user: Annotated[CurrentUser, Depends(require_admin)],
 ):
     result = await get_models()
     return ApiResponse[ModelListResponse](

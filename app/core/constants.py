@@ -15,3 +15,4 @@ class ApiTag:
     MODELS = "Models"
     AGENTS = "Agents"
     TOOLS = "Tools"
+    DOCUMENTS = "Documents"

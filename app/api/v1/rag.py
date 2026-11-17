@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from redis.asyncio import Redis
 
@@ -13,8 +15,8 @@ router = APIRouter()
 @router.post("/rag/query", response_model=ApiResponse[RAGQueryResponse])
 async def rag_query(
     request: RAGQueryRequest,
-    workspace_id: str = Depends(get_workspace_id),
-    redis: Redis = Depends(get_redis_client),
+    workspace_id: Annotated[str, Depends(get_workspace_id)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
 ) -> ApiResponse[RAGQueryResponse]:
     """
     RAG 查询接口

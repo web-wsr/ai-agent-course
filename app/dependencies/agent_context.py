@@ -1,4 +1,5 @@
 import uuid
+from typing import Annotated
 
 from fastapi import Depends, Query
 
@@ -17,7 +18,7 @@ class AgentContext:
         self.debug = debug
 
 async def get_agent_context(
-        current_user: CurrentUser = Depends(get_current_user),
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
         debug: bool = Query(default=False, description="是否开启调试模式")
 ) -> AgentContext:
     return AgentContext(

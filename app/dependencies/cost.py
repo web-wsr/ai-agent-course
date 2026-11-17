@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import Depends, Query
 
 from app.schemas.user import CurrentUser
@@ -15,7 +17,7 @@ class Costcontext:
 
 
 async def get_cost_context(
-        current_user: CurrentUser = Depends(get_current_user),
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
         max_tokens: int = Query(default=1024, ge=1, le=8192)
 )-> Costcontext:
     return Costcontext(

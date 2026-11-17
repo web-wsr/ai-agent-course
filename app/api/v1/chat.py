@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Path, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from redis.asyncio import Redis
@@ -22,9 +24,9 @@ router = APIRouter()
 )
 async def chat(
     request: ChatRequest, 
-    current_user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session),
-    redis: Redis = Depends(get_redis_client),
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
 ) -> ApiResponse[ChatResponse]:
     result = await chat_with_ai(
         request=request,
@@ -56,8 +58,8 @@ async def chat_in_conversation(
 @router.post("/chat/di-demo", response_model=ApiResponse[ChatResponse])
 async def chat_di_demo(
     request: ChatRequest,
-    current_user: CurrentUser = Depends(get_current_user),
-    llm_provider: MockLLMProvider = Depends(get_llm_provider)
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    llm_provider: Annotated[MockLLMProvider, Depends(get_llm_provider)]
 ) -> ApiResponse[ChatResponse]:
     latest_messaage = request.messages[-1].content
 
