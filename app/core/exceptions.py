@@ -1,9 +1,11 @@
 from enum import IntEnum
 
+
 class ErrorCode(IntEnum):
     """
     错误码枚举
     """
+
     SUCCESS = 0
 
     BAD_REQUEST = 40000
@@ -23,17 +25,26 @@ class ErrorCode(IntEnum):
 
     CONVERSATION_NOT_FOUND = 40401
 
+    LLM_API_KEY_MISSING = 50010
+
+    LLM_MODEL_NOT_FOUND = 50011
+    LLM_RATE_LIMITED = 50012
+    LLM_TIMEOUT = 50013
+    LLM_RESPONSE_PARSE_FAILED = 50014
+    LLM_PROVIDER_ERROR = 50015
+
 
 class AppException(Exception):
     """
     自定义异常类
     """
+
     def __init__(
-            self,
-            message: str,
-            code: int = ErrorCode.BAD_REQUEST,
-            status_code: int = 400,
-            data: dict | list | None = None,
+        self,
+        message: str,
+        code: int = ErrorCode.BAD_REQUEST,
+        status_code: int = 400,
+        data: dict | list | None = None,
     ):
         self.message = message
         self.code = int(code)

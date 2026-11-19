@@ -13,7 +13,7 @@ class QwenProvider(OpenAICompatibleProvider):
             api_key=settings.dashscope_api_key,
             base_url=settings.qwen_base_url,
             defalt_model="qwen-plus",
-            timeout_seconds=60,
+            timeout_seconds=settings.llm_timeout_seconds,
         )
 
     def _build_payload(

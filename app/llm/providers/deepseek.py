@@ -13,5 +13,5 @@ class DeepSeekProvider(OpenAICompatibleProvider):
             api_key=settings.deepseek_api_key,
             base_url=settings.deepseek_base_url,
             defalt_model="deepseek-chat",
-            timeout_seconds=60,
+            timeout_seconds=settings.llm_timeout_seconds,
         )

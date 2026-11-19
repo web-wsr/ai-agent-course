@@ -35,7 +35,7 @@ class OpenAIProvider(BaseLLMProvider):
         self.api_key = settings.openai_api_key
         self.base_url = settings.openai_base_url.rstrip("/")
         self.default_model = "gpt-4o-mini"
-        self.timeout_seconds = 60
+        self.timeout_seconds = settings.llm_timeout_seconds
 
     async def chat(self, request: LLMRequest) -> LLMResponse:
         url = f"{self.base_url}/responses"

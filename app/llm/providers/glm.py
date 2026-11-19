@@ -11,5 +11,5 @@ class GLMProvider(OpenAICompatibleProvider):
             api_key=settings.glm_api_key,
             base_url=settings.glm_base_url,
             defalt_model="glm-5.3-flash",
-            timeout_seconds=60,
+            timeout_seconds=settings.llm_timeout_seconds,
         )

@@ -14,6 +14,7 @@ async def main():
     with (
         patch.object(settings, "glm_api_key", "test-glm-key"),
         patch.object(settings, "glm_base_url", "https://open.bigmodel.cn/api/paas/v4/"),
+        patch.object(settings, "llm_timeout_seconds", 60),
     ):
         verify_factory()
         await verify_chat_and_stream()
