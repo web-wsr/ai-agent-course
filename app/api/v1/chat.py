@@ -1,29 +1,31 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Path, Query
 from redis.asyncio import Redis
-from app.dependencies.redis import get_redis_client
-from app.dependencies.database import get_db_session
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.request_context import get_trace_id
+from app.dependencies.auth import get_current_user
+from app.dependencies.database import get_db_session
+from app.dependencies.llm import get_llm_provider
+from app.dependencies.rate_limit import chat_rate_limit
+from app.dependencies.redis import get_redis_client
+from app.llm.base import BaseLLMProvider
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.response import ApiResponse
-from app.services.chat_service import chat_with_ai
-from app.dependencies.auth import get_current_user
 from app.schemas.user import CurrentUser
-from app.dependencies.llm import MockLLMProvider, get_llm_provider
-from app.core.request_context import get_trace_id
-from app.dependencies.rate_limit import chat_rate_limit
+from app.services.chat_service import chat_with_ai
 
 router = APIRouter()
 
+
 @router.post(
-    "/chat", 
-    response_model=ApiResponse[ChatResponse], 
+    "/chat",
+    response_model=ApiResponse[ChatResponse],
     dependencies=[Depends(chat_rate_limit)],
 )
 async def chat(
-    request: ChatRequest, 
+    request: ChatRequest,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db_session)],
     redis: Annotated[Redis, Depends(get_redis_client)],
@@ -35,15 +37,16 @@ async def chat(
     )
     result.trace_id = f"{result.trace_id}_user_{current_user.user_id}"
 
-    return ApiResponse[ChatResponse](
-        data=result
-    )
+    return ApiResponse[ChatResponse](data=result)
 
-@router.post("/conversations/{conversation_id}/chat", response_model=ApiResponse[ChatResponse])
+
+@router.post(
+    "/conversations/{conversation_id}/chat", response_model=ApiResponse[ChatResponse]
+)
 async def chat_in_conversation(
     request: ChatRequest,
     conversation_id: str = Path(..., description="会话 ID"),
-    debug: bool = Query(default=False, description="是否开启调试模式")
+    debug: bool = Query(default=False, description="是否开启调试模式"),
 ) -> ApiResponse[ChatResponse]:
     result = await chat_with_ai(request)
 
@@ -51,15 +54,14 @@ async def chat_in_conversation(
         result.trace_id = result.trace_id or "debug_trace"
 
     result.session_id = conversation_id
-    return ApiResponse[ChatResponse](
-        data=result
-    )
+    return ApiResponse[ChatResponse](data=result)
+
 
 @router.post("/chat/di-demo", response_model=ApiResponse[ChatResponse])
 async def chat_di_demo(
     request: ChatRequest,
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    llm_provider: Annotated[MockLLMProvider, Depends(get_llm_provider)]
+    llm_provider: Annotated[BaseLLMProvider, Depends(get_llm_provider)],
 ) -> ApiResponse[ChatResponse]:
     latest_messaage = request.messages[-1].content
 
@@ -77,5 +79,3 @@ async def chat_di_demo(
         data=result,
         trace_id=get_trace_id(),
     )
-
-

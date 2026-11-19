@@ -1,11 +1,16 @@
-from app.core.config import settings
+# from app.core.config import settings
 
-class MockLLMProvider:
-    def __init__(self, model: str):
-        self.model = model
 
-    async def chat(self, message: str) -> str:
-        return f"[{self.model}] 模拟回答: {message}"
+# class MockLLMProvider:
+#     def __init__(self, model: str):
+#         self.model = model
 
-async def get_llm_provider() -> MockLLMProvider:
-    return MockLLMProvider(model=settings.default_model)
+#     async def chat(self, message: str) -> str:
+#         return f"[{self.model}] 模拟回答: {message}"
+
+from app.llm.base import BaseLLMProvider
+from app.llm.factory import LLMProviderFactory
+
+
+async def get_llm_provider() -> BaseLLMProvider:
+    return LLMProviderFactory.create()

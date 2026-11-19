@@ -1,7 +1,7 @@
 # 统一管理 key 命名
 
-def chat_response_cache_key(question_hash: str) -> str:
-    return f"chat: response: {question_hash}"
+def chat_response_cache_key(question_hash: str, model: str) -> str:
+    return f"chat:response:{model}:{question_hash}"
 
 def rate_limit_key(user_id: str, api_name: str) -> str:
     return f"rate_limit: {api_name}: {user_id}"

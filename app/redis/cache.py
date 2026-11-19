@@ -59,8 +59,9 @@ def hash_text(text: str) -> str:
 async def get_cached_chat_response(
     redis: Redis,
     question: str,
+    model: str,
 ) -> str | None:
-    key = chat_response_cache_key(hash_text(question))
+    key = chat_response_cache_key(hash_text(question), model)
     return await redis.get(key)
 
 
@@ -68,9 +69,10 @@ async def cache_chat_response(
         redis: Redis,
         question: str,
         answer: str,
+        model: str,
         ttl_seconds: int =300,
 ):
-    key = chat_response_cache_key(hash_text(question))
+    key = chat_response_cache_key(hash_text(question), model)
 
     await redis.set(
         key,
