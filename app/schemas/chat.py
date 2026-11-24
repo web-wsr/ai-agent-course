@@ -25,57 +25,68 @@
 from enum import Enum
 from typing import Any
 
-from app.core.config import settings
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.config import settings
+
+
 class MessageRole(str, Enum):
-    SYSTEM = 'system'
-    USER = 'user'
-    ASSISTANT = 'assistant'
-    TOOL = 'tool'
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL = "tool"
+
 
 class ChatMessage(BaseModel):
     role: MessageRole = Field(..., description="消息角色")
     content: str = Field(..., min_length=1, description="消息内容")
+
 
 class TokenUsage(BaseModel):
     prompt_tokens: int = Field(default=0, ge=0, description="输入 token 数")
     completion_tokens: int = Field(default=0, ge=0, description="输出 token 数")
     total_tokens: int = Field(default=0, ge=0, description="总 token 数")
 
+
 # 引用来源
 class SourceDocument(BaseModel):
     document_id: str = Field(..., description="文档 ID")
     title: str = Field(..., description="文档标题")
-    content: str =Field(..., description="命中的文档片段")
+    content: str = Field(..., description="命中的文档片段")
     score: float = Field(default=0.0, ge=0, le=1, description="相关性分数")
     metadata: dict[str, Any] = Field(default_factory=dict, description="文档元数据")
+
 
 class ChatRequest(BaseModel):
     # 不允许前端传未知字段，否则抛错
     model_config = ConfigDict(extra="forbid")
 
-    messages: list[ChatMessage] = Field(
-        ...,
-        min_length=1,
-        description="对话消息列表"
-    )
+    messages: list[ChatMessage] = Field(..., min_length=1, description="对话消息列表")
     model: str = Field(default="deepseek-chat", description="模型名称")
-    temperature : float = Field(default=0.7, ge=0, le=2, description="模型温度")
+    temperature: float = Field(default=0.7, ge=0, le=2, description="模型温度")
     stream: bool = Field(default=False, description="是否流式输出")
     session_id: str | None = Field(default=None, description="会话 ID")
     user_id: str | None = Field(default=None, description="用户 ID")
+    prompt_scenario: str | None = Field(
+        default=None,
+        description="Prompt 场景，如 general_chat / ecommerce_customer_service / rag_qa",
+    )
+    # prompt 指定版本
+    prompt_version: str | None = Field(
+        default="v1",
+        description="Prompt 版本",
+    )
     metadata: dict[str, Any] = Field(default_factory=dict, description="扩展元数据")
 
     @field_validator("model")
     @classmethod
-    def validate_model(cls, value: str) -> str: 
+    def validate_model(cls, value: str) -> str:
 
-        if value not in settings.supported_model_list: 
+        if value not in settings.supported_model_list:
             raise ValueError(f"不支持的模型：{value}")
 
         return value
+
 
 class ChatResponse(BaseModel):
     answer: str = Field(..., description="AI 回答")

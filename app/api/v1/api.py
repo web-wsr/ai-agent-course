@@ -8,6 +8,7 @@ from app.api.v1.conversations import router as conversations_router
 from app.api.v1.documents import router as documents_router
 from app.api.v1.health import router as health_router
 from app.api.v1.models import router as models_router
+from app.api.v1.prompts import router as prompts_router
 from app.api.v1.rag import router as rag_router
 from app.api.v1.tools import router as tools_router
 from app.core.constants import ApiTag
@@ -17,6 +18,7 @@ api_router = APIRouter()
 
 
 api_router.include_router(health_router, tags=[ApiTag.HEALTH])
+api_router.include_router(prompts_router, tags=["Prompts"])
 api_router.include_router(
     agents_router, tags=[ApiTag.AGENTS], dependencies=[Depends(verify_api_key)]
 )
