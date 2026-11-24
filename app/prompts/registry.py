@@ -4,7 +4,8 @@ from app.prompts.ecommerce import (
     ECOMMERCE_CUSTOMER_SERVICE_PROMPT_V1,
     ECOMMERCE_CUSTOMER_SERVICE_PROMPT_V2,
 )
-from app.prompts.rag import RAG_QA_PROMPT_V1
+from app.prompts.rag import RAG_QA_PROMPT_V1, RAG_QA_PROMPT_V2
+from app.prompts.resume import RESUME_OPTIMIZE_PROMPT_V1
 from app.prompts.templates import GENERAL_CHAT_PROMPT_V1
 
 
@@ -49,4 +50,6 @@ prompt_registry.register(GENERAL_CHAT_PROMPT_V1)
 prompt_registry.register(ECOMMERCE_CUSTOMER_SERVICE_PROMPT_V1)
 prompt_registry.register(ECOMMERCE_CUSTOMER_SERVICE_PROMPT_V2)
 prompt_registry.register(RAG_QA_PROMPT_V1)
+prompt_registry.register(RAG_QA_PROMPT_V2)
 prompt_registry.register(AGENT_PLANNER_PROMPT_V1)
+prompt_registry.register(RESUME_OPTIMIZE_PROMPT_V1)

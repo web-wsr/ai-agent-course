@@ -15,8 +15,8 @@ def register_exception_handlers(app: FastAPI):
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):
         logger.warning(
-            f"app_exception path={request.url.path}",
-            f"code{exc.code} message={exc.message}"
+            f"app_exception path={request.url.path} "
+            f"code={exc.code} message={exc.message}"
         )
 
         return JSONResponse(
@@ -31,7 +31,7 @@ def register_exception_handlers(app: FastAPI):
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
         logger.warning(
-            f"http_exception path={request.url.path}",
+            f"http_exception path={request.url.path} "
             f"status_code={exc.status_code} detail={exc.detail}"
         )
 
