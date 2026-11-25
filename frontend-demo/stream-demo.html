@@ -33,6 +33,28 @@
       min-height: 120px;
       white-space: pre-wrap;
     }
+
+    /* thinking 事件：灰色提示，收到首个 message 后隐藏 */
+    #thinking {
+      margin-top: 24px;
+      color: #9aa0a6;
+      font-size: 13px;
+      animation: thinking-pulse 1.2s ease-in-out infinite;
+    }
+
+    #thinking[hidden] {
+      display: none;
+    }
+
+    @keyframes thinking-pulse {
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.55;
+      }
+    }
   </style>
   <body>
     <h1>AI Chat Stream Demo</h1>
@@ -41,13 +63,16 @@
     <br />
     <button onclick="sendMessage()">发送</button>
 
+    <div id="thinking" hidden>正在理解你的问题...</div>
     <div id="answer"></div>
     <script>
       async function sendMessage() {
         const question = document.getElementById("question").value;
         const answerEl = document.getElementById("answer");
+        const thinkingEl = document.getElementById("thinking");
 
         answerEl.textContent = "";
+        thinkingEl.hidden = true;
 
         const response = await fetch("http://127.0.0.1:8000/api/v1/chat/stream", {
           method: "POST",
@@ -90,12 +115,12 @@
           buffer = events.pop() || "";
 
           for (const rawEvent of events) {
-            handleSSEEvent(rawEvent, answerEl);
+            handleSSEEvent(rawEvent, answerEl, thinkingEl);
           }
         }
       }
 
-      function handleSSEEvent(rawEvent, answerEl) {
+      function handleSSEEvent(rawEvent, answerEl, thinkingEl) {
         const lines = rawEvent.split("\n");
 
         let eventName = "message";
@@ -117,15 +142,25 @@
 
         const data = JSON.parse(dataText);
 
+        if (eventName === "thinking") {
+          // 模型还在理解问题，先给个灰色提示
+          thinkingEl.textContent = data.content || "正在理解你的问题...";
+          thinkingEl.hidden = false;
+        }
+
         if (eventName === "message") {
+          // 正文第一个字符到了，说明已经开始输出，收起思考提示
+          thinkingEl.hidden = true;
           answerEl.textContent += data.content || "";
         }
 
         if (eventName === "done") {
+          thinkingEl.hidden = true;
           console.log("done:", data);
         }
 
         if (eventName === "error") {
+          thinkingEl.hidden = true;
           answerEl.textContent += `\n\nError: ${data.message}`;
         }
       }

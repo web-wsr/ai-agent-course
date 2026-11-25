@@ -67,5 +67,5 @@ class LLMStreamChunk(BaseModel):
     model: str = Field(..., description="模型名称")
     content: str = Field(default="", description="模型输出内容")
     finish_reason: str | None = Field(default=None, description="模型结束原因")
-    usage: LLMUsage | None = Field(default=LLMUsage, description="Token用量")
+    usage: LLMUsage | None = Field(default=None, description="Token用量")
     raw_chunk: dict[str, Any] = Field(default_factory=dict, description="原始 chunk")

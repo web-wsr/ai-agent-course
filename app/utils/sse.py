@@ -1,6 +1,8 @@
 import json
 from typing import Any
 
+THINKING_TEXT = "正在理解你的问题..."
+
 
 def format_sse(
     data: Any,
@@ -28,6 +30,19 @@ def format_sse(
         lines.append(f"data: {line}")
 
     return "\n".join(lines) + "\n\n"
+
+
+def format_thinking_event(
+    content: str = THINKING_TEXT,
+    message_id: str | None = None,
+) -> str:
+    """流式开始时的思考中提示，前端展示为灰色提示，收到首个 message 后隐藏。"""
+    data = {"content": content}
+
+    if message_id is not None:
+        data["message_id"] = message_id
+
+    return format_sse(event="thinking", data=data)
 
 
 def format_done_event(data: dict | None = None) -> str:

@@ -17,6 +17,7 @@ from app.utils.sse import (
     format_done_event,
     format_error_event,
     format_sse,
+    format_thinking_event,
 )
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +47,9 @@ async def stream_chat_with_ai(
     # 增加缓存命中的逻辑
     if redis:
         cached_answer = await get_cached_chat_response(
-            redis=redis, question=latest_user_message
+            redis=redis,
+            question=latest_user_message,
+            model=llm_request.model,
         )
 
         if cached_answer:
@@ -80,6 +83,10 @@ async def stream_chat_with_ai(
             )
 
             return
+
+    # 流式一开始先发 thinking：前端展示灰色提示，等首个 message 到了再隐藏。
+    # 缓存命中不走模型，直接吐正文，所以不发 thinking，避免提示一闪而过。
+    yield format_thinking_event(message_id=message_id)
 
     yield format_sse(
         event="start",
@@ -132,6 +139,7 @@ async def stream_chat_with_ai(
                 redis=redis,
                 question=latest_user_message,
                 answer=full_answer,
+                model=llm_request.model,
             )
 
         yield format_done_event(
@@ -151,7 +159,7 @@ async def stream_chat_with_ai(
         yield format_error_event(
             message=exc.message,
             code=int(ErrorCode.LLM_CALL_FAILED),
-            detail={
+            data={
                 "provider": exc.provider,
                 "status_code": exc.status_code,
             },
