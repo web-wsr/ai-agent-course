@@ -1,6 +1,7 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +16,7 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.response import ApiResponse
 from app.schemas.user import CurrentUser
 from app.services.chat_service import chat_with_ai
+from app.services.chat_stream_service import stream_chat_with_ai
 
 router = APIRouter()
 
@@ -78,4 +80,39 @@ async def chat_di_demo(
     return ApiResponse[ChatResponse](
         data=result,
         trace_id=get_trace_id(),
+    )
+
+
+@router.post(
+    "/chat/stream",
+    dependencies=[Depends(chat_rate_limit)],
+)
+async def chat_stream(
+    request_body: ChatRequest,
+    request: Request,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    redis: Annotated[Redis, Depends(get_redis_client)],
+    llm_provider: Annotated[BaseLLMProvider, Depends(get_llm_provider)],
+):
+    async def event_generator():
+        async for event in stream_chat_with_ai(
+            request=request_body,
+            llm_provider=llm_provider,
+            db=db,
+            redis=redis,
+        ):
+            if await request.is_disconnected():
+                break
+
+            yield event
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
