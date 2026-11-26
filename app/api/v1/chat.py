@@ -1,10 +1,14 @@
+import asyncio
+from contextlib import suppress
 from typing import Annotated
 
+import anyio
 from fastapi import APIRouter, Depends, Path, Query, Request
 from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.core.request_context import get_trace_id
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db_session
@@ -19,6 +23,8 @@ from app.services.chat_service import chat_with_ai
 from app.services.chat_stream_service import stream_chat_with_ai
 
 router = APIRouter()
+
+logger = get_logger(__name__)
 
 
 @router.post(
@@ -96,16 +102,36 @@ async def chat_stream(
     llm_provider: Annotated[BaseLLMProvider, Depends(get_llm_provider)],
 ):
     async def event_generator():
-        async for event in stream_chat_with_ai(
+        stream = stream_chat_with_ai(
             request=request_body,
             llm_provider=llm_provider,
             db=db,
             redis=redis,
-        ):
-            if await request.is_disconnected():
-                break
+        )
 
-            yield event
+        stop_reason: str | None = None
+
+        try:
+            async for event in stream:
+                # 前端点停止会 abort 请求，Starlette 在此处收到 http.disconnect
+                if await request.is_disconnected():
+                    stop_reason = "client_disconnected"
+                    break
+
+                yield event
+        except asyncio.CancelledError:
+            # uvicorn 在客户端断开时也可能直接取消流式任务，同样视为“已停止”
+            stop_reason = "cancelled"
+            raise
+        finally:
+            # 正常结束或被中断都显式关闭上游生成器，及时释放 LLM 连接。
+            # shield 保证任务已被取消时仍能执行关闭动作。
+            with anyio.CancelScope(shield=True):
+                with suppress(Exception):
+                    await stream.aclose()
+
+            if stop_reason:
+                logger.info(f"chat_stream_stopped reason={stop_reason}")
 
     return StreamingResponse(
         event_generator(),

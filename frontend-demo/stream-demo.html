@@ -26,6 +26,25 @@
       cursor: pointer;
     }
 
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    #status {
+      margin-left: 12px;
+      font-size: 13px;
+      color: #9aa0a6;
+    }
+
+    #status[data-state="stopped"] {
+      color: #d97706;
+    }
+
+    #status[data-state="error"] {
+      color: #dc2626;
+    }
+
     #answer {
       margin-top: 24px;
       padding: 16px;
@@ -61,66 +80,150 @@
 
     <textarea id="question">请用三句话解释什么是 Streaming 流式输出。</textarea>
     <br />
-    <button onclick="sendMessage()">发送</button>
+    <button id="sendBtn" onclick="sendMessage()">发送</button>
+    <button id="stopBtn" onclick="stopStreaming()" disabled>停止</button>
+    <span id="status"></span>
 
     <div id="thinking" hidden>正在理解你的问题...</div>
     <div id="answer"></div>
     <script>
+      const answerEl = document.getElementById("answer");
+      const thinkingEl = document.getElementById("thinking");
+      const statusEl = document.getElementById("status");
+      const sendBtn = document.getElementById("sendBtn");
+      const stopBtn = document.getElementById("stopBtn");
+
+      const STATE_TEXT = {
+        idle: "",
+        thinking: "思考中...",
+        streaming: "生成中...",
+        stopped: "已停止生成",
+        done: "已完成",
+        error: "出错了",
+      };
+
+      // idle / thinking / streaming / stopped / done / error
+      let streamState = "idle";
+      let controller = null;
+      let reader = null;
+
+      function setState(next) {
+        streamState = next;
+        // 方便在控制台/自动化里断言当前状态
+        window.__streamState = next;
+
+        statusEl.textContent = STATE_TEXT[next] || "";
+        statusEl.dataset.state = next;
+      }
+
       async function sendMessage() {
+        if (controller) {
+          return; // 正在生成，忽略重复点击
+        }
+
         const question = document.getElementById("question").value;
-        const answerEl = document.getElementById("answer");
-        const thinkingEl = document.getElementById("thinking");
 
         answerEl.textContent = "";
         thinkingEl.hidden = true;
 
-        const response = await fetch("http://127.0.0.1:8000/api/v1/chat/stream", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": "dev-api-key-123",
-            "x-user-id": "u_10001",
-            "x-username": "dawei",
-          },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: "user",
-                content: question,
+        controller = new AbortController();
+        sendBtn.disabled = true;
+        stopBtn.disabled = false;
+        setState("thinking");
+
+        try {
+          const response = await fetch(
+            "http://127.0.0.1:8000/api/v1/chat/stream",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": "dev-api-key-123",
+                "x-user-id": "u_10001",
+                "x-username": "dawei",
               },
-            ],
-            model: "glm-5.3-flash",
-            temperature: 0.7,
-            stream: true,
-          }),
-        });
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: "user",
+                    content: question,
+                  },
+                ],
+                model: "glm-5.3-flash",
+                temperature: 0.7,
+                stream: true,
+              }),
+              // 停止按钮会 abort 这个 signal，浏览器随即断开连接
+              signal: controller.signal,
+            },
+          );
 
-        if (!response.ok) {
-          answerEl.textContent = `请求失败Error: ${response.status} ${response.statusText}`;
-          return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
+          if (!response.ok) {
+            answerEl.textContent = `请求失败Error: ${response.status} ${response.statusText}`;
+            setState("error");
+            return;
           }
-          buffer += decoder.decode(value, { stream: true });
 
-          const events = buffer.split("\n\n");
-          buffer = events.pop() || "";
+          reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
 
-          for (const rawEvent of events) {
-            handleSSEEvent(rawEvent, answerEl, thinkingEl);
+          while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) {
+              break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+
+            const events = buffer.split("\n\n");
+            buffer = events.pop() || "";
+
+            for (const rawEvent of events) {
+              handleSSEEvent(rawEvent);
+            }
           }
+
+          if (streamState !== "stopped") {
+            setState("done");
+          }
+        } catch (err) {
+          // abort 会让 fetch/reader 抛 AbortError，这不是错误，是用户主动停止
+          if (err.name === "AbortError") {
+            if (streamState !== "stopped") {
+              setState("stopped");
+            }
+          } else {
+            answerEl.textContent += `\n\nError: ${err.message}`;
+            setState("error");
+          }
+        } finally {
+          controller = null;
+          reader = null;
+          sendBtn.disabled = false;
+          stopBtn.disabled = true;
+          thinkingEl.hidden = true;
         }
       }
 
-      function handleSSEEvent(rawEvent, answerEl, thinkingEl) {
+      function stopStreaming() {
+        if (!controller) {
+          return;
+        }
+
+        // 1. 中断请求：浏览器会关闭连接，后端 is_disconnected() 变为 True
+        controller.abort();
+        setState("stopped");
+        thinkingEl.hidden = true;
+
+        // 2. 尽快释放 reader（abort 后 read() 会抛 AbortError）
+        if (reader) {
+          reader.cancel().catch(() => {});
+        }
+      }
+
+      function handleSSEEvent(rawEvent) {
         const lines = rawEvent.split("\n");
 
         let eventName = "message";
@@ -146,22 +249,26 @@
           // 模型还在理解问题，先给个灰色提示
           thinkingEl.textContent = data.content || "正在理解你的问题...";
           thinkingEl.hidden = false;
+          setState("thinking");
         }
 
         if (eventName === "message") {
           // 正文第一个字符到了，说明已经开始输出，收起思考提示
           thinkingEl.hidden = true;
+          setState("streaming");
           answerEl.textContent += data.content || "";
         }
 
         if (eventName === "done") {
           thinkingEl.hidden = true;
+          setState("done");
           console.log("done:", data);
         }
 
         if (eventName === "error") {
           thinkingEl.hidden = true;
           answerEl.textContent += `\n\nError: ${data.message}`;
+          setState("error");
         }
       }
     </script>
