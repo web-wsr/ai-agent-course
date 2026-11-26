@@ -18,6 +18,7 @@ from app.schemas.chat import (
     ChatRequest,
     ChatResponse,
     MessageRole,
+    MessageStatus,
     SourceDocument,
     TokenUsage,
 )
@@ -104,6 +105,16 @@ async def chat_with_ai(
             f"chat_llm_provider_error provider={exc.provider}"
             f"status_code={exc.status_code}"
         )
+
+        # 异常也要留痕：保存一条 status=failed 的记录，便于排查
+        if db and request.session_id:
+            await save_failed_messages(
+                db=db,
+                session_id=request.session_id,
+                user_message=latest_user_message,
+                model=request.model,
+            )
+
         raise AppException(
             message=exc.message,
             code=ErrorCode.LLM_CALL_FAILED,
@@ -149,6 +160,7 @@ async def chat_with_ai(
             content=answer,
             model=model,
             prompt_tokens=usage.prompt_tokens,
+            status=MessageStatus.COMPLETED.value,
         )
 
     logger.info(
@@ -168,6 +180,35 @@ async def chat_with_ai(
         trace_id=f"trace_{uuid.uuid4().hex[:8]}",
         latency_ms=500,
     )
+
+
+async def save_failed_messages(
+    db: AsyncSession,
+    session_id: str,
+    user_message: str,
+    model: str,
+) -> None:
+    """调用模型失败时落库：用户消息正常记录，助手消息标 failed。"""
+    try:
+        await conversation_repository.add_message(
+            db=db,
+            conversation_id=session_id,
+            role=MessageRole.USER.value,
+            content=user_message,
+            model=model,
+        )
+
+        await conversation_repository.add_message(
+            db=db,
+            conversation_id=session_id,
+            role=MessageRole.ASSISTANT.value,
+            content="",
+            model=model,
+            status=MessageStatus.FAILED.value,
+        )
+    except Exception:
+        # 落库失败不能盖住原始的 LLM 异常
+        logger.exception("chat_save_failed_messages_error")
 
 
 def get_latest_user_message(request: ChatRequest) -> str:

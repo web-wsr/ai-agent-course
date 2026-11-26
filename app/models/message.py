@@ -20,6 +20,16 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # 消息状态：completed / failed / interrupted
+    # 存字符串而不是 DB 枚举，后续加状态不用改类型
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="completed",
+        server_default="completed",
+        index=True,
+    )
+
     prompt_tokens: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

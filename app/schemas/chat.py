@@ -37,6 +37,14 @@ class MessageRole(str, Enum):
     TOOL = "tool"
 
 
+class MessageStatus(str, Enum):
+    """消息落库状态。"""
+
+    COMPLETED = "completed"  # 正常输出结束
+    FAILED = "failed"  # 模型调用或处理过程异常
+    INTERRUPTED = "interrupted"  # 用户中途停止 / 连接断开
+
+
 class ChatMessage(BaseModel):
     role: MessageRole = Field(..., description="消息角色")
     content: str = Field(..., min_length=1, description="消息内容")

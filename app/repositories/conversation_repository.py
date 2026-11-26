@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import Conversation
 from app.models.message import Message
-from app.schemas.chat import ChatMessage, MessageRole
+from app.schemas.chat import ChatMessage, MessageRole, MessageStatus
 from app.schemas.conversation import ConversationCreateRequest
 
 class ConversationRespository:
@@ -31,7 +31,13 @@ class ConversationRespository:
     ) -> list[Message]:
         stmt = (
             select(Message)
-            .where(Message.conversation_id == conversation_id)
+            .where(
+                Message.conversation_id == conversation_id,
+                # 失败消息只用于排查，不进入对话历史
+                Message.status != MessageStatus.FAILED.value,
+                # 中断且一个字都没输出时内容为空，读出来会破坏 ChatMessage 校验
+                Message.content != "",
+            )
             .order_by(Message.created_at.asc())
         )
         result = await db.execute(stmt)
@@ -55,6 +61,7 @@ class ConversationRespository:
             prompt_tokens: int = 0,
             completion_tokens: int = 0,
             total_tokens: int = 0,
+            status: str = MessageStatus.COMPLETED.value,
     ) -> Message:
         message = Message( 
             id=f"m_{uuid.uuid4().hex[:8]}",
@@ -64,7 +71,8 @@ class ConversationRespository:
             model=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
-            total_tokens=total_tokens
+            total_tokens=total_tokens,
+            status=status,
         )
         db.add(message)
         await db.commit()
