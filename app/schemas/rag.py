@@ -1,15 +1,17 @@
 from typing import Any
- 
+
 from pydantic import BaseModel, Field
+
 from app.schemas.chat import SourceDocument, TokenUsage
 
 
 class RAGQueryRequest(BaseModel):
-    question: str = Field(..., min_length=1, max_length=2000,description="用户问题")
+    question: str = Field(..., min_length=1, max_length=2000, description="用户问题")
     knowledge_base_id: str = Field(..., description="知识库 ID")
     top_k: int = Field(default=5, ge=1, le=20, description="返回文档数量")
     rerank: bool = Field(default=True, description="是否进行文档重新排序")
     metadata: dict[str, Any] = Field(default_factory=dict, description="扩展元数据")
+
 
 class RAGQueryResponse(BaseModel):
     answer: str = Field(..., description="AI 回答")
