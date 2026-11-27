@@ -1,6 +1,12 @@
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import (
+    BaseModel,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class IntentClassificationOutput(BaseModel):
@@ -105,3 +111,44 @@ class ResumeOptimizationOutput(BaseModel):
     suggestions: list[str] = Field(default_factory=list, description="简历优化建议")
 
     rewritten_text: str = Field(..., description="改写后的简历内容")
+
+
+# 新增订单信息抽取结构化输出
+class OrderInfoExtractOutput(BaseModel):
+    order_id: str | None = Field(default=None, description="订单号")
+    phone_last4: str | None = Field(default=None, description="手机号后四位")
+    has_required_info: bool = Field(..., description="是否具备查询订单所需信息")
+    missing_fields: list[str] = Field(default_factory=list, description="缺少字段")
+
+    @field_validator("order_id", "phone_last4", mode="before")
+    @classmethod
+    def normalize_empty_value(cls, value):
+        """模型爱把空值写成字符串，这里统一收敛成 None。"""
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            text = value.strip()
+            if text.lower() in {"", "null", "none", "n/a", "无", "未知", "未提供"}:
+                return None
+            return text
+
+        return str(value)
+
+    @field_validator("phone_last4")
+    @classmethod
+    def validate_phone_last4(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"\d{4}", value):
+            raise ValueError("phone_last4 必须是 4 位数字")
+        return value
+
+    @model_validator(mode="after")
+    def reconcile_required_info(self):
+        """has_required_info / missing_fields 以实际字段为准，不采信模型自报。"""
+        missing = [
+            name for name in ("order_id", "phone_last4")
+            if getattr(self, name) is None
+        ]
+        self.missing_fields = missing
+        self.has_required_info = not missing
+        return self

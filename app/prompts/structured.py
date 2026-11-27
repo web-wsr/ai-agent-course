@@ -146,3 +146,52 @@ AGENT_PLAN_STRUCTURED_PROMPT_V1 = PromptTemplate(
         ),
     ],
 )
+
+
+ORDER_INFO_EXTRACT_STRUCTURED_PROMPT_V1 = PromptTemplate(
+    prompt_id="order_info_extract_structured",
+    name="订单信息抽取结构化输出 Prompt",
+    scenario=PromptScenario.ECOMMERCE_CUSTOMER_SERVICE,
+    version="v1",
+    description="从用户话术中抽取订单号与手机号后四位，并判断信息是否齐全，只输出 JSON。",
+    required_variables=[
+        "user_question",
+    ],
+    messages=[
+        PromptMessageTemplate(
+            role=PromptRole.SYSTEM,
+            template=(
+                "你是一个电商平台的订单信息抽取器。\n"
+                "你必须只输出 JSON，不要输出 Markdown，不要输出解释，不要输出代码块。\n"
+                "\n"
+                "任务：从用户这句话里抽出订单号和手机号后四位。\n"
+                "\n"
+                "字段说明：\n"
+                "- order_id：订单号，通常是 5-20 位数字或字母数字组合，如 10001、ORD20241126。\n"
+                "- phone_last4：手机号后四位，必须是 4 位数字。\n"
+                "- has_required_info：order_id 和 phone_last4 都有才是 true。\n"
+                "- missing_fields：缺失的字段名列表，元素只能是 \"order_id\" 或 "
+                "\"phone_last4\"；两个都有就输出空数组。\n"
+                "\n"
+                "抽取纪律：\n"
+                "1. 只抽取用户原话里明确出现的信息，不推断、不补全、不猜测。\n"
+                "2. 用户说“订单 10001”就取 10001；只说“我的订单”就不取，order_id 填 null。\n"
+                "3. 不要把完整手机号或快递单号当成订单号；"
+                "如果用户只给了完整手机号，phone_last4 取最后四位，order_id 仍为 null。\n"
+                "4. 没提到的字段一律填 null，缺什么就在 missing_fields 里写什么。\n"
+                "\n"
+                "输出 JSON 示例：\n"
+                "{{\n"
+                '  "order_id": "10001",\n'
+                '  "phone_last4": null,\n'
+                '  "has_required_info": false,\n'
+                '  "missing_fields": ["phone_last4"]\n'
+                "}}"
+            ),
+        ),
+        PromptMessageTemplate(
+            role=PromptRole.USER,
+            template="用户原话：{user_question}",
+        ),
+    ],
+)

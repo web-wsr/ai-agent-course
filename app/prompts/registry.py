@@ -10,6 +10,7 @@ from app.prompts.resume import RESUME_OPTIMIZE_PROMPT_V1
 from app.prompts.structured import (
     AGENT_PLAN_STRUCTURED_PROMPT_V1,
     INTENT_CLASSIFICATION_STRUCTURED_PROMPT_V1,
+    ORDER_INFO_EXTRACT_STRUCTURED_PROMPT_V1,
     RAG_STRUCTURED_ANSWER_PROMPT_V1,
 )
 from app.prompts.templates import GENERAL_CHAT_PROMPT_V1
@@ -63,3 +64,4 @@ prompt_registry.register(ORDER_INTENT_PROMPT_V1)
 prompt_registry.register(INTENT_CLASSIFICATION_STRUCTURED_PROMPT_V1)
 prompt_registry.register(RAG_STRUCTURED_ANSWER_PROMPT_V1)
 prompt_registry.register(AGENT_PLAN_STRUCTURED_PROMPT_V1)
+prompt_registry.register(ORDER_INFO_EXTRACT_STRUCTURED_PROMPT_V1)

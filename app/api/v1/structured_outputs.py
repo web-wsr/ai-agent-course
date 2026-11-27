@@ -12,6 +12,7 @@ from app.services.structured_output_service import structured_output_service
 from app.structured_outputs.schemas import (
     AgentPlanOutput,
     IntentClassificationOutput,
+    OrderInfoExtractOutput,
     RAGStructuredAnswerOutput,
 )
 
@@ -35,6 +36,11 @@ class AgentPlanRequest(BaseModel):
     goal: str = Field(..., min_length=1, description="用户目标")
     available_tools: str = Field(..., description="可用工具列表")
     constraints: str = Field(default="无", description="约束条件")
+    model: str = Field(default="deepseek-chat", description="模型名称")
+
+
+class OrderInfoExtractRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=500, description="用户原话")
     model: str = Field(default="deepseek-chat", description="模型名称")
 
 
@@ -96,3 +102,24 @@ async def plan_agent(
     )
 
     return ApiResponse[AgentPlanOutput](data=result)
+
+
+@router.post(
+    "/structured/order-info",
+    response_model=ApiResponse[OrderInfoExtractOutput],
+)
+async def extract_order_info(
+    request: OrderInfoExtractRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    llm_provider: Annotated[BaseLLMProvider, Depends(get_llm_provider)],
+) -> ApiResponse[OrderInfoExtractOutput]:
+    """
+    订单信息抽取：从用户原话里拿订单号和手机号后四位，并判断信息是否齐全
+    """
+    result = await structured_output_service.extract_order_info(
+        user_question=request.question,
+        model=request.model,
+        llm_provider=llm_provider,
+    )
+
+    return ApiResponse[OrderInfoExtractOutput](data=result)

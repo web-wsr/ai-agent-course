@@ -16,6 +16,7 @@ from app.structured_outputs.retry import parse_or_repair_structured_output
 from app.structured_outputs.schemas import (
     AgentPlanOutput,
     IntentClassificationOutput,
+    OrderInfoExtractOutput,
     RAGStructuredAnswerOutput,
 )
 from pydantic import BaseModel
@@ -112,6 +113,35 @@ class StructuredOutputService:
             llm_provider=llm_provider,
             schema=AgentPlanOutput,
             task_name="agent_plan",
+        )
+
+    async def extract_order_info(
+        self,
+        user_question: str,
+        model: str,
+        llm_provider: BaseLLMProvider,
+    ) -> OrderInfoExtractOutput:
+        """从用户话术中抽取订单号 / 手机号后四位，判断信息是否齐全。"""
+        messages = prompt_service.render_by_prompt_id(
+            prompt_id="order_info_extract_structured",
+            variables={
+                "user_question": user_question,
+            },
+        )
+
+        request = LLMRequest(
+            model=model,
+            messages=messages,
+            temperature=0.1,
+            stream=False,
+            response_format=build_json_object_response_format(),
+        )
+
+        return await self._call_and_parse(
+            request=request,
+            llm_provider=llm_provider,
+            schema=OrderInfoExtractOutput,
+            task_name="order_info_extract",
         )
 
     async def _call_and_parse(
