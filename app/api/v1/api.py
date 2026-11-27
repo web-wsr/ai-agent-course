@@ -10,6 +10,7 @@ from app.api.v1.health import router as health_router
 from app.api.v1.models import router as models_router
 from app.api.v1.prompts import router as prompts_router
 from app.api.v1.rag import router as rag_router
+from app.api.v1.structured_outputs import router as structured_outputs_router
 from app.api.v1.tools import router as tools_router
 from app.core.constants import ApiTag
 from app.dependencies.auth import verify_api_key
@@ -42,5 +43,11 @@ api_router.include_router(
 api_router.include_router(
     documents_router,
     tags=[ApiTag.DOCUMENTS],
+    dependencies=[Depends(verify_api_key)],
+)
+
+api_router.include_router(
+    structured_outputs_router,
+    tags=["Structured Outputs"],
     dependencies=[Depends(verify_api_key)],
 )
