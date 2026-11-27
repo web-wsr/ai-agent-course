@@ -20,6 +20,7 @@ from app.api.v1.structured_outputs import (
     OrderInfoExtractRequest,
     extract_order_info,
 )
+from app.core.config import settings
 from app.core.exceptions import AppException, ErrorCode
 from app.llm.errors import LLMProviderError
 from app.llm.schemas import LLMProviderName, LLMResponse
@@ -27,6 +28,7 @@ from app.prompts.registry import prompt_registry
 from app.prompts.renderer import extract_variables
 from app.services.structured_output_service import structured_output_service
 from app.structured_outputs.schemas import OrderInfoExtractOutput
+from app.structured_outputs.retry import parse_or_repair_structured_output
 
 MODEL = "glm-5.3-flash"
 PROMPT_ID = "order_info_extract_structured"
@@ -145,6 +147,43 @@ def test_invalid_output_is_repaired_once():
     assert len(provider.calls) == 2, "第一次解析失败应触发一次修复调用"
     assert result.order_id == "10001"
     assert result.has_required_info is True
+
+
+def test_repair_retries_in_loop():
+    """修复仍失败时继续重试，直到 max_retries 用尽前成功。"""
+    bad = "我觉得这个订单是 10001，尾号 8848"
+
+    provider = FakeProvider([bad, FULL_JSON])
+
+    result = asyncio.run(
+        parse_or_repair_structured_output(
+            raw_text=bad,
+            schema=OrderInfoExtractOutput,
+            model=MODEL,
+            llm_provider=provider,
+            max_retries=2,
+        )
+    )
+
+    assert len(provider.calls) == 2, "首次解析 + 2 次修复机会，第 2 次修复成功"
+    assert result.order_id == "10001"
+
+
+def test_retry_exhausted_raises_app_exception():
+    """修复次数用尽后抛 AppException，而不是继续死循环。"""
+    bad = "我觉得这个订单是 10001，尾号 8848"
+
+    provider = FakeProvider([bad])
+
+    try:
+        asyncio.run(run_service(provider))
+    except AppException as exc:
+        assert exc.code == int(ErrorCode.STRUCTURED_OUTPUT_PARSE_FAILED)
+        assert exc.data["max_retries"] == settings.structured_output_max_retries
+    else:
+        raise AssertionError("修复次数用尽应抛 AppException")
+
+    assert len(provider.calls) == 2, "默认 1 次重试：首次调用 + 1 次修复调用"
 
 
 def test_llm_error_raises_app_exception():

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     default_model: str = Field(default="deepseek-chat")
     supported_models: str = Field(default="deepseek-chat, qwen-plus, gpt-4o-mini")
     llm_timeout_seconds: int = Field(default=60)
+    structured_output_max_retries: int = Field(default=1)  # 结构化输出修复重试次数
     database_url: str = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/ai_agent_course"
     )
