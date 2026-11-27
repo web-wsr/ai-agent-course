@@ -5,6 +5,7 @@ from app.core.exceptions import AppException, ErrorCode
 from app.core.logging import get_logger
 
 # 大模型
+from app.llm.base import BaseLLMProvider
 from app.llm.errors import LLMProviderError
 from app.llm.factory import LLMProviderFactory, infer_provider_from_model
 from app.llm.schemas import LLMMessage, LLMRequest, LLMRole
@@ -23,16 +24,58 @@ from app.schemas.chat import (
     TokenUsage,
 )
 from app.services.prompt_service import prompt_service
+from app.services.structured_output_service import structured_output_service
+from app.structured_outputs.schemas import IntentClassificationOutput
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
+
+# 意图识别命中后的固定话术：不进主模型，直接返回
+ASK_ORDER_ID_ANSWER = "请提供订单号，我帮你查询订单进度。"
+TRANSFER_HUMAN_ANSWER = "已为你转接人工客服，请稍等，客服会尽快接入。"
+
+
+def build_intent_gate_answer(intent: IntentClassificationOutput) -> str | None:
+    """命中意图规则返回固定话术，未命中返回 None（继续走普通 LLM Chat）。"""
+    if intent.intent == "query_order" and intent.need_order_id:
+        return ASK_ORDER_ID_ANSWER
+
+    if intent.intent == "human_service":
+        return TRANSFER_HUMAN_ANSWER
+
+    return None
+
+
+async def classify_chat_intent(
+    user_message: str,
+    model: str,
+    llm_provider: BaseLLMProvider,
+) -> IntentClassificationOutput | None:
+    """回答前先识别意图；识别失败只降级，不阻断主回答流程。"""
+    try:
+        intent = await structured_output_service.classify_intent(
+            user_question=user_message,
+            model=model,
+            llm_provider=llm_provider,
+        )
+    except (AppException, LLMProviderError) as exc:
+        logger.warning(f"chat_intent_classify_failed error={exc}")
+        return None
+
+    logger.info(
+        f"chat_intent intent={intent.intent} confidence={intent.confidence} "
+        f"need_order_id={intent.need_order_id} strategy={intent.reply_strategy}"
+    )
+
+    return intent
 
 
 async def chat_with_ai(
     request: ChatRequest,
     db: AsyncSession | None = None,
     redis: Redis | None = None,
+    llm_provider: BaseLLMProvider | None = None,
 ) -> ChatResponse:
     # await asyncio.sleep(1)
     # 支持的模型
@@ -77,28 +120,42 @@ async def chat_with_ai(
     #         data={"reason": "mock llm failed"},
     #     )
 
-    # if "AI Agent" in latest_user_message:
-    #     answer = (
-    #         "AI Agent 可以理解为具备目标理解、任务规划、工具调用和结果反馈能力的智能体"
-    #     )
-    # elif "RAG" in latest_user_message:
-    #     answer = (
-    #         "RAG 是一种基于知识库的问答系统，通过知识库进行查询，并返回结果给用户,"
-    #         "RAG 的核心是知识库，知识库可以由用户自行构建，也可以通过知识图谱进行自动构建。"
-    #     )
-    # elif "LangGraph" in latest_user_message:
-    #     answer = (
-    #         "LangGraph 是一个基于知识图谱的问答系统，通过知识图谱进行查询，并返回结果给用户。"
-    #         "LangGraph 的核心是知识图谱，知识图谱可以由用户自行构建，也可以通过知识库进行自动构建。"
-    #     )
-    # else:
-    #     answer = f"模拟回答：你问的是【{latest_user_message}】"
-
     provider_name = infer_provider_from_model(request.model)
+
+    # 意图识别在回答之前：query_order 缺订单号 / 需要转人工时直接给固定话术
+    if llm_provider is None:
+        try:
+            llm_provider = LLMProviderFactory.create(provider_name)
+        except (LLMProviderError, ValueError) as exc:
+            # 创建失败交给下面的主流程统一报错，这里只跳过意图识别
+            logger.warning(f"chat_intent_provider_unavailable error={exc}")
+            llm_provider = None
+
+    if llm_provider is not None:
+        intent = await classify_chat_intent(
+            user_message=latest_user_message,
+            model=model,
+            llm_provider=llm_provider,
+        )
+
+        gate_answer = build_intent_gate_answer(intent) if intent else None
+
+        if gate_answer:
+            logger.info(f"chat_intent_shortcut intent={intent.intent} model={model}")
+
+            return await respond_with_intent_gate(
+                request=request,
+                answer=gate_answer,
+                model=model,
+                user_message=latest_user_message,
+                db=db,
+                redis=redis,
+            )
+
     llm_request = build_llm_request_from_chat_request(request)
 
     try:
-        llm_provider = LLMProviderFactory.create(provider_name)
+        llm_provider = llm_provider or LLMProviderFactory.create(provider_name)
         llm_response = await llm_provider.chat(llm_request)
     except LLMProviderError as exc:
         logger.exception(
@@ -142,25 +199,13 @@ async def chat_with_ai(
         )
 
     if db and request.session_id:
-        await conversation_repository.add_message(
+        await save_chat_messages(
             db=db,
-            conversation_id=request.session_id,
-            role=MessageRole.USER.value,
-            content=latest_user_message,
+            session_id=request.session_id,
+            user_message=latest_user_message,
+            answer=answer,
             model=model,
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-            total_tokens=usage.total_tokens,
-        )
-
-        await conversation_repository.add_message(
-            db=db,
-            conversation_id=request.session_id,
-            role=MessageRole.ASSISTANT.value,
-            content=answer,
-            model=model,
-            prompt_tokens=usage.prompt_tokens,
-            status=MessageStatus.COMPLETED.value,
+            usage=usage,
         )
 
     logger.info(
@@ -170,15 +215,105 @@ async def chat_with_ai(
 
     sources = build_mock_sources(latest_user_message)
 
+    return build_chat_response(
+        request=request,
+        answer=answer,
+        model=model,
+        usage=usage,
+        sources=sources,
+        latency_ms=500,
+    )
+
+
+async def respond_with_intent_gate(
+    request: ChatRequest,
+    answer: str,
+    model: str,
+    user_message: str,
+    db: AsyncSession | None = None,
+    redis: Redis | None = None,
+) -> ChatResponse:
+    """意图命中固定话术：不再调用主模型，直接返回并正常落库 / 写缓存。"""
+    usage = TokenUsage()
+
+    if redis:
+        await cache_chat_response(
+            redis=redis,
+            question=user_message,
+            answer=answer,
+            model=model,
+        )
+
+    if db and request.session_id:
+        await save_chat_messages(
+            db=db,
+            session_id=request.session_id,
+            user_message=user_message,
+            answer=answer,
+            model=model,
+            usage=usage,
+        )
+
+    return build_chat_response(
+        request=request,
+        answer=answer,
+        model=model,
+        usage=usage,
+        sources=[],
+        latency_ms=0,
+    )
+
+
+def build_chat_response(
+    request: ChatRequest,
+    answer: str,
+    model: str,
+    usage: TokenUsage,
+    sources: list[SourceDocument] | None = None,
+    latency_ms: int = 0,
+) -> ChatResponse:
     return ChatResponse(
         answer=answer,
         model=model,
         session_id=request.session_id or f"s_{uuid.uuid4().hex[:8]}",
         message_id=f"m_{uuid.uuid4().hex[:8]}",
         usage=usage,
-        sources=sources,
+        sources=sources or [],
         trace_id=f"trace_{uuid.uuid4().hex[:8]}",
-        latency_ms=500,
+        latency_ms=latency_ms,
+    )
+
+
+async def save_chat_messages(
+    db: AsyncSession,
+    session_id: str,
+    user_message: str,
+    answer: str,
+    model: str,
+    usage: TokenUsage | None = None,
+) -> None:
+    """成功回答落库：用户消息 + 助手消息（completed）。"""
+    usage = usage or TokenUsage()
+
+    await conversation_repository.add_message(
+        db=db,
+        conversation_id=session_id,
+        role=MessageRole.USER.value,
+        content=user_message,
+        model=model,
+        prompt_tokens=usage.prompt_tokens,
+        completion_tokens=usage.completion_tokens,
+        total_tokens=usage.total_tokens,
+    )
+
+    await conversation_repository.add_message(
+        db=db,
+        conversation_id=session_id,
+        role=MessageRole.ASSISTANT.value,
+        content=answer,
+        model=model,
+        prompt_tokens=usage.prompt_tokens,
+        status=MessageStatus.COMPLETED.value,
     )
 
 
