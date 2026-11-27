@@ -22,6 +22,10 @@ router = APIRouter()
 class IntentClassificationRequest(BaseModel):
     question: str = Field(..., min_length=1, description="用户问题")
     model: str = Field(default="deepseek-chat", description="模型名称")
+    use_json_schema: bool = Field(
+        default=False,
+        description="是否用 json_schema 结构化输出；模型不支持时自动回退 json_object",
+    )
 
 
 class RAGStructuredRequest(BaseModel):
@@ -30,6 +34,10 @@ class RAGStructuredRequest(BaseModel):
         ..., min_length=1, description="检索到的知识库上下文"
     )
     model: str = Field(default="deepseek-chat", description="模型名称")
+    use_json_schema: bool = Field(
+        default=False,
+        description="是否用 json_schema 结构化输出；模型不支持时自动回退 json_object",
+    )
 
 
 class AgentPlanRequest(BaseModel):
@@ -37,11 +45,19 @@ class AgentPlanRequest(BaseModel):
     available_tools: str = Field(..., description="可用工具列表")
     constraints: str = Field(default="无", description="约束条件")
     model: str = Field(default="deepseek-chat", description="模型名称")
+    use_json_schema: bool = Field(
+        default=False,
+        description="是否用 json_schema 结构化输出；模型不支持时自动回退 json_object",
+    )
 
 
 class OrderInfoExtractRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500, description="用户原话")
     model: str = Field(default="deepseek-chat", description="模型名称")
+    use_json_schema: bool = Field(
+        default=False,
+        description="是否用 json_schema 结构化输出；模型不支持时自动回退 json_object",
+    )
 
 
 @router.post(
@@ -60,6 +76,7 @@ async def classify_intent(
         user_question=request.question,
         model=request.model,
         llm_provider=llm_provider,
+        use_json_schema=request.use_json_schema,
     )
 
     return ApiResponse[IntentClassificationOutput](data=result)
@@ -79,6 +96,7 @@ async def generate_rag_structured_answer(
         retrieved_context=request.retrieved_context,
         model=request.model,
         llm_provider=llm_provider,
+        use_json_schema=request.use_json_schema,
     )
 
     return ApiResponse[RAGStructuredAnswerOutput](data=result)
@@ -99,6 +117,7 @@ async def plan_agent(
         constraints=request.constraints,
         model=request.model,
         llm_provider=llm_provider,
+        use_json_schema=request.use_json_schema,
     )
 
     return ApiResponse[AgentPlanOutput](data=result)
@@ -120,6 +139,7 @@ async def extract_order_info(
         user_question=request.question,
         model=request.model,
         llm_provider=llm_provider,
+        use_json_schema=request.use_json_schema,
     )
 
     return ApiResponse[OrderInfoExtractOutput](data=result)
